@@ -1,10 +1,12 @@
 "use client"
 
 import type React from "react"
+import { useState, useEffect } from "react"
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { Activity, BarChart3, Computer, Home, LogOut, Settings, User } from "lucide-react"
+import { getStoredUser, clearAuth, type AuthUser } from "@/lib/api"
 
 import {
   Sidebar,
@@ -25,11 +27,21 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
+  const [user, setUser] = useState<AuthUser | null>(null)
+
+  useEffect(() => {
+    const stored = getStoredUser()
+    setUser(stored)
+  }, [])
 
   const handleLogout = () => {
-    // Here you would typically handle logout logic (clear session, cookies, etc)
+    clearAuth()
     router.push("/login")
   }
+
+  const initials = user?.username
+    ? user.username.slice(0, 2).toUpperCase()
+    : "JD"
 
   return (
     <SidebarProvider>
@@ -97,11 +109,11 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
               <div className="flex items-center gap-3 flex-1">
                 <Avatar className="h-8 w-8">
                   <AvatarImage src="/placeholder.svg?height=32&width=32" alt="User" />
-                  <AvatarFallback>JD</AvatarFallback>
+                  <AvatarFallback>{initials}</AvatarFallback>
                 </Avatar>
                 <div className="flex flex-col text-sm">
-                  <span className="font-medium">John Doe</span>
-                  <span className="text-xs text-muted-foreground">Admin</span>
+                  <span className="font-medium">{user?.username || "User"}</span>
+                  <span className="text-xs text-muted-foreground">{user?.role || "Admin"}</span>
                 </div>
               </div>
               <Button variant="ghost" size="icon" onClick={handleLogout}>

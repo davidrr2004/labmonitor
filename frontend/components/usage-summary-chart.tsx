@@ -2,7 +2,7 @@
 
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 
-const data = [
+const defaultData = [
   { time: "8:00", cpu: 30, network: 20, power: 45 },
   { time: "9:00", cpu: 40, network: 25, power: 50 },
   { time: "10:00", cpu: 45, network: 30, power: 55 },
@@ -13,11 +13,17 @@ const data = [
   { time: "15:00", cpu: 60, network: 45, power: 65 },
 ]
 
-export function UsageSummaryChart() {
+interface UsageSummaryChartProps {
+  data?: Array<{ time: string; cpu: number; network: number; power: number }>
+}
+
+export function UsageSummaryChart({ data }: UsageSummaryChartProps) {
+  const chartData = data && data.length > 0 ? data : defaultData
+
   return (
     <div className="h-[250px] w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+        <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
           <defs>
             <linearGradient id="colorCpu" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8} />
@@ -70,4 +76,3 @@ export function UsageSummaryChart() {
     </div>
   )
 }
-

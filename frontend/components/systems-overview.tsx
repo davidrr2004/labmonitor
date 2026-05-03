@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { MoreHorizontal, Power, RefreshCw } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -15,53 +15,89 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
+import {
+  getComputers,
+  getResourceHistory,
+  type Computer,
+} from "@/lib/api"
 
-// Sample data for systems
-const systems = [
-  {
-    id: "LAB-PC-01",
-    status: "online",
-    cpuUsage: 42,
-    memoryUsage: 35,
-    networkUsage: 20,
-    lastActive: "2 minutes ago",
-  },
-  {
-    id: "LAB-PC-02",
-    status: "online",
-    cpuUsage: 28,
-    memoryUsage: 45,
-    networkUsage: 15,
-    lastActive: "5 minutes ago",
-  },
-  {
-    id: "LAB-PC-03",
-    status: "offline",
-    cpuUsage: 0,
-    memoryUsage: 0,
-    networkUsage: 0,
-    lastActive: "2 hours ago",
-  },
-  {
-    id: "LAB-PC-04",
-    status: "online",
-    cpuUsage: 92,
-    memoryUsage: 78,
-    networkUsage: 65,
-    lastActive: "1 minute ago",
-  },
-  {
-    id: "LAB-PC-05",
-    status: "offline",
-    cpuUsage: 0,
-    memoryUsage: 0,
-    networkUsage: 0,
-    lastActive: "32 minutes ago",
-  },
-]
+interface SystemDisplay {
+  id: string
+  status: string
+  cpuUsage: number
+  memoryUsage: number
+  networkUsage: number
+  lastActive: string
+}
+
+function formatTimeAgo(timestamp: string): string {
+  const diff = Date.now() - new Date(timestamp).getTime()
+  const minutes = Math.floor(diff / 60000)
+  if (minutes < 1) return "just now"
+  if (minutes < 60) return `${minutes} minute${minutes > 1 ? "s" : ""} ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} hour${hours > 1 ? "s" : ""} ago`
+  const days = Math.floor(hours / 24)
+  return `${days} day${days > 1 ? "s" : ""} ago`
+}
 
 export function SystemsOverview() {
-  const [systemsData, setSystemsData] = useState(systems)
+  const [systemsData, setSystemsData] = useState<SystemDisplay[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const fetchSystems = useCallback(async () => {
+    try {
+      const computersRes = await getComputers()
+      const computers = computersRes.data || []
+
+      // Fetch latest resource for each computer
+      const systemDisplays: SystemDisplay[] = await Promise.all(
+        computers.map(async (comp: Computer) => {
+          let cpuUsage = 0
+          let memoryUsage = 0
+          let networkUsage = 0
+
+          if (comp.is_online) {
+            try {
+              const historyRes = await getResourceHistory(comp.system_id, 1, 1)
+              if (historyRes.data && historyRes.data.length > 0) {
+                const latest = historyRes.data[0]
+                cpuUsage = Math.round(latest.cpu)
+                memoryUsage = Math.round(latest.memory)
+                networkUsage = Math.round(
+                  Math.min(
+                    ((latest.network_in + latest.network_out) / 12500) * 100,
+                    100,
+                  ),
+                )
+              }
+            } catch {
+              // use defaults
+            }
+          }
+
+          return {
+            id: comp.system_id,
+            status: comp.is_online ? "online" : "offline",
+            cpuUsage,
+            memoryUsage,
+            networkUsage,
+            lastActive: formatTimeAgo(comp.last_seen),
+          }
+        }),
+      )
+
+      setSystemsData(systemDisplays)
+    } catch {
+      // keep empty state on error
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchSystems()
+  }, [fetchSystems])
 
   const getStatusVariant = (status: string) => {
     return status === "online" ? "secondary" : "destructive"
@@ -100,7 +136,7 @@ export function SystemsOverview() {
             {systemsData.filter((s) => s.status === "offline").length} Offline
           </Badge>
         </div>
-        <Button variant="outline" size="sm">
+        <Button variant="outline" size="sm" onClick={() => { setLoading(true); fetchSystems() }}>
           <RefreshCw className="mr-2 h-4 w-4" />
           Refresh
         </Button>
@@ -120,6 +156,20 @@ export function SystemsOverview() {
             </TableRow>
           </TableHeader>
           <TableBody>
+            {loading && systemsData.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                  Loading systems...
+                </TableCell>
+              </TableRow>
+            )}
+            {!loading && systemsData.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                  No systems registered
+                </TableCell>
+              </TableRow>
+            )}
             {systemsData.map((system) => (
               <TableRow key={system.id}>
                 <TableCell className="font-medium">{system.id}</TableCell>
@@ -187,4 +237,3 @@ export function SystemsOverview() {
     </div>
   )
 }
-

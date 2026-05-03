@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { CheckCircle2, ChevronDown, Power, RefreshCw, Search, Shield, Trash2, Computer } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -21,20 +21,20 @@ import {
 } from "@/components/ui/dialog"
 import { Progress } from "@/components/ui/progress"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import {
+  getComputers,
+  type Computer as ComputerType,
+} from "@/lib/api"
 
-// Sample data for systems
-const systems = [
-  { id: "LAB-PC-01", status: "online", ip: "192.168.1.101", os: "Windows 10", lastBoot: "2 hours ago" },
-  { id: "LAB-PC-02", status: "online", ip: "192.168.1.102", os: "Windows 10", lastBoot: "3 hours ago" },
-  { id: "LAB-PC-03", status: "offline", ip: "192.168.1.103", os: "Windows 10", lastBoot: "2 days ago" },
-  { id: "LAB-PC-04", status: "online", ip: "192.168.1.104", os: "Windows 10", lastBoot: "1 hour ago" },
-  { id: "LAB-PC-05", status: "offline", ip: "192.168.1.105", os: "Windows 10", lastBoot: "1 day ago" },
-  { id: "LAB-PC-06", status: "online", ip: "192.168.1.106", os: "Windows 10", lastBoot: "5 hours ago" },
-  { id: "LAB-PC-07", status: "online", ip: "192.168.1.107", os: "Windows 10", lastBoot: "4 hours ago" },
-  { id: "LAB-PC-08", status: "online", ip: "192.168.1.108", os: "Windows 10", lastBoot: "6 hours ago" },
-]
+interface SystemDisplay {
+  id: string
+  status: string
+  ip: string
+  os: string
+  lastBoot: string
+}
 
-// Sample data for processes
+// Sample data for processes (no backend endpoint for process management)
 const processes = [
   { id: 1, name: "chrome.exe", cpu: 12.5, memory: 350, user: "student", status: "running" },
   { id: 2, name: "vscode.exe", cpu: 8.2, memory: 280, user: "student", status: "running" },
@@ -46,7 +46,19 @@ const processes = [
   { id: 8, name: "malware.exe", cpu: 25.0, memory: 500, user: "unknown", status: "suspicious" },
 ]
 
+function formatTimeAgo(timestamp: string): string {
+  const diff = Date.now() - new Date(timestamp).getTime()
+  const minutes = Math.floor(diff / 60000)
+  if (minutes < 1) return "just now"
+  if (minutes < 60) return `${minutes} minute${minutes > 1 ? "s" : ""} ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} hour${hours > 1 ? "s" : ""} ago`
+  const days = Math.floor(hours / 24)
+  return `${days} day${days > 1 ? "s" : ""} ago`
+}
+
 export function AdminControlPanel() {
+  const [systems, setSystems] = useState<SystemDisplay[]>([])
   const [selectedSystem, setSelectedSystem] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false)
@@ -54,6 +66,30 @@ export function AdminControlPanel() {
   const [targetId, setTargetId] = useState<string | number | null>(null)
   const [isActionInProgress, setIsActionInProgress] = useState(false)
   const [actionProgress, setActionProgress] = useState(0)
+  const [loading, setLoading] = useState(true)
+
+  const fetchSystems = useCallback(async () => {
+    try {
+      const res = await getComputers()
+      const computers = res.data || []
+      const mapped: SystemDisplay[] = computers.map((comp: ComputerType) => ({
+        id: comp.system_id,
+        status: comp.is_online ? "online" : "offline",
+        ip: `${comp.college} / ${comp.lab_name}`,
+        os: comp.college,
+        lastBoot: formatTimeAgo(comp.last_seen),
+      }))
+      setSystems(mapped)
+    } catch {
+      // keep empty
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchSystems()
+  }, [fetchSystems])
 
   const filteredSystems = systems.filter(
     (system) =>
@@ -145,6 +181,20 @@ export function AdminControlPanel() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
+                  {loading && (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                        Loading systems...
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {!loading && filteredSystems.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                        No systems found
+                      </TableCell>
+                    </TableRow>
+                  )}
                   {filteredSystems.map((system) => (
                     <TableRow
                       key={system.id}
@@ -205,7 +255,7 @@ export function AdminControlPanel() {
             </Badge>
           </div>
           <div className="flex gap-2 w-full sm:w-auto">
-            <Button variant="outline" className="flex-1 sm:flex-initial">
+            <Button variant="outline" className="flex-1 sm:flex-initial" onClick={() => { setLoading(true); fetchSystems() }}>
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
             </Button>
@@ -383,4 +433,3 @@ export function AdminControlPanel() {
     </div>
   )
 }
-

@@ -2,7 +2,7 @@
 
 import { Badge } from "@/components/ui/badge"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { User } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -12,11 +12,11 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { getStoredUser } from "@/lib/api"
 
 export function ProfileForm() {
   const [isEditing, setIsEditing] = useState(false)
 
-  // Sample admin data
   const [adminData, setAdminData] = useState({
     name: "John Doe",
     email: "john.doe@university.edu",
@@ -26,6 +26,19 @@ export function ProfileForm() {
     bio: "Lab administrator with 5 years of experience managing computer resources and maintaining system security.",
     role: "Senior Lab Administrator",
   })
+
+  useEffect(() => {
+    const user = getStoredUser()
+    if (user) {
+      setAdminData((prev) => ({
+        ...prev,
+        name: user.username,
+        email: user.username,
+        id: user.id,
+        role: user.role === "admin" ? "Administrator" : "User",
+      }))
+    }
+  }, [])
 
   const handleSave = () => {
     setIsEditing(false)
@@ -229,4 +242,3 @@ export function ProfileForm() {
     </Tabs>
   )
 }
-

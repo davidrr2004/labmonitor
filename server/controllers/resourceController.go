@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"math"
 	"strconv"
 	"time"
 
@@ -117,11 +118,6 @@ func PostResource(c *fiber.Ctx) error {
 
 func GetHistory(c *fiber.Ctx) error {
 	computerID := c.Query("computer_id")
-	if computerID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Missing computer_id parameter",
-		})
-	}
 
 	// Parse pagination parameters
 	page, _ := strconv.Atoi(c.Query("page", "1"))
@@ -129,7 +125,7 @@ func GetHistory(c *fiber.Ctx) error {
 	if page < 1 {
 		page = 1
 	}
-	if limit < 1 || limit > 100 {
+	if limit < 1 || limit > 1000 {
 		limit = 50
 	}
 	offset := (page - 1) * limit
@@ -137,19 +133,23 @@ func GetHistory(c *fiber.Ctx) error {
 	var logs []models.ResourceLog
 	var total int64
 
-	// Get total count
-	if err := config.DB.Model(&models.ResourceLog{}).Where("computer_id = ?", computerID).Count(&total).Error; err != nil {
+	query := config.DB.Model(&models.ResourceLog{})
+	if computerID != "" {
+		query = query.Where("computer_id = ?", computerID)
+	}
+
+	if err := query.Count(&total).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch resource logs",
 		})
 	}
 
-	// Get paginated logs
-	if err := config.DB.Where("computer_id = ?", computerID).
-		Order("timestamp desc").
-		Offset(offset).
-		Limit(limit).
-		Find(&logs).Error; err != nil {
+	findQuery := config.DB.Order("timestamp desc").Offset(offset).Limit(limit)
+	if computerID != "" {
+		findQuery = findQuery.Where("computer_id = ?", computerID)
+	}
+
+	if err := findQuery.Find(&logs).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch resource logs",
 		})
@@ -163,5 +163,65 @@ func GetHistory(c *fiber.Ctx) error {
 			"total_items":  total,
 			"per_page":     limit,
 		},
+	})
+}
+
+// GetResourceSummary returns aggregate resource stats for the dashboard
+func GetResourceSummary(c *fiber.Ctx) error {
+	var computers []models.Computer
+	if err := config.DB.Find(&computers).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to fetch data",
+		})
+	}
+
+	totalSystems := len(computers)
+	var onlineCount int
+	var totalCPU, totalMemory, totalNetIn, totalNetOut float64
+	var latestResources []fiber.Map
+
+	for _, comp := range computers {
+		if !comp.IsOnline() {
+			continue
+		}
+		onlineCount++
+
+		var log models.ResourceLog
+		if err := config.DB.Where("computer_id = ?", comp.ComputerID).
+			Order("timestamp desc").First(&log).Error; err != nil {
+			continue
+		}
+
+		totalCPU += log.CPU
+		totalMemory += log.Memory
+		totalNetIn += log.NetworkIn
+		totalNetOut += log.NetworkOut
+
+		latestResources = append(latestResources, fiber.Map{
+			"computer_id": comp.ComputerID,
+			"cpu":         log.CPU,
+			"memory":      log.Memory,
+			"network_in":  log.NetworkIn,
+			"network_out": log.NetworkOut,
+			"timestamp":   log.Timestamp,
+		})
+	}
+
+	var avgCPU, avgMemory, avgNetwork float64
+	if onlineCount > 0 {
+		avgCPU = totalCPU / float64(onlineCount)
+		avgMemory = totalMemory / float64(onlineCount)
+		avgNetwork = (totalNetIn + totalNetOut) / float64(2*onlineCount)
+	}
+
+	return c.JSON(fiber.Map{
+		"total_systems": totalSystems,
+		"online_count":  onlineCount,
+		"averages": fiber.Map{
+			"cpu":     math.Round(avgCPU*100) / 100,
+			"memory":  math.Round(avgMemory*100) / 100,
+			"network": math.Round(avgNetwork*100) / 100,
+		},
+		"latest": latestResources,
 	})
 }

@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState, useCallback } from "react"
 import {
   AreaChart,
   Area,
@@ -19,9 +20,10 @@ import {
 } from "recharts"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { getResourceHistory, type ResourceLog } from "@/lib/api"
 
-// Sample data
-const dailyData = [
+// Fallback data
+const defaultDailyData = [
   { hour: "00:00", cpu: 20, network: 15, power: 30, internet: 25 },
   { hour: "03:00", cpu: 15, network: 10, power: 25, internet: 20 },
   { hour: "06:00", cpu: 25, network: 20, power: 35, internet: 30 },
@@ -32,7 +34,7 @@ const dailyData = [
   { hour: "21:00", cpu: 40, network: 35, power: 45, internet: 40 },
 ]
 
-const weeklyData = [
+const defaultWeeklyData = [
   { day: "Mon", cpu: 45, network: 40, power: 50, internet: 45 },
   { day: "Tue", cpu: 55, network: 50, power: 60, internet: 55 },
   { day: "Wed", cpu: 65, network: 60, power: 70, internet: 65 },
@@ -42,7 +44,7 @@ const weeklyData = [
   { day: "Sun", cpu: 30, network: 25, power: 35, internet: 30 },
 ]
 
-const monthlyData = [
+const defaultMonthlyData = [
   { week: "Week 1", cpu: 50, network: 45, power: 55, internet: 50 },
   { week: "Week 2", cpu: 60, network: 55, power: 65, internet: 60 },
   { week: "Week 3", cpu: 55, network: 50, power: 60, internet: 55 },
@@ -75,7 +77,7 @@ const chartColors = {
 }
 
 // Define the pie chart data
-const pieData = [
+const defaultPieData = [
   { name: "Web Browsing", value: 40 },
   { name: "Programming", value: 25 },
   { name: "Multimedia", value: 20 },
@@ -89,13 +91,134 @@ const pieChartColors = [
   { name: "Other", color: "hsl(30 100% 50%)" }
 ]
 
-interface UsageChartsProps {
-  period: "daily" | "weekly" | "monthly"
+function aggregateLogs(
+  logs: ResourceLog[],
+  period: "daily" | "weekly" | "monthly",
+): Array<Record<string, string | number>> {
+  if (logs.length === 0) return []
+
+  const avg = (arr: number[]) =>
+    arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0
+
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+
+  if (period === "daily") {
+    const buckets = new Map<string, { cpu: number[]; network: number[]; power: number[]; internet: number[] }>()
+    for (const log of logs) {
+      const d = new Date(log.timestamp)
+      const hour = `${(Math.floor(d.getHours() / 3) * 3).toString().padStart(2, "0")}:00`
+      if (!buckets.has(hour)) {
+        buckets.set(hour, { cpu: [], network: [], power: [], internet: [] })
+      }
+      const b = buckets.get(hour)!
+      b.cpu.push(log.cpu)
+      b.network.push(Math.min(((log.network_in + log.network_out) / 12500) * 100, 100))
+      b.power.push(log.memory)
+      b.internet.push(Math.min(((log.network_in + log.network_out) / 12500) * 100, 100))
+    }
+    return Array.from(buckets.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([hour, v]) => ({
+        hour,
+        cpu: avg(v.cpu),
+        network: avg(v.network),
+        power: avg(v.power),
+        internet: avg(v.internet),
+      }))
+  }
+
+  if (period === "weekly") {
+    const buckets = new Map<string, { cpu: number[]; network: number[]; power: number[]; internet: number[] }>()
+    for (const log of logs) {
+      const d = new Date(log.timestamp)
+      const day = dayNames[d.getDay()]
+      if (!buckets.has(day)) {
+        buckets.set(day, { cpu: [], network: [], power: [], internet: [] })
+      }
+      const b = buckets.get(day)!
+      b.cpu.push(log.cpu)
+      b.network.push(Math.min(((log.network_in + log.network_out) / 12500) * 100, 100))
+      b.power.push(log.memory)
+      b.internet.push(Math.min(((log.network_in + log.network_out) / 12500) * 100, 100))
+    }
+    const dayOrder = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    return dayOrder
+      .filter((d) => buckets.has(d))
+      .map((day) => {
+        const v = buckets.get(day)!
+        return {
+          day,
+          cpu: avg(v.cpu),
+          network: avg(v.network),
+          power: avg(v.power),
+          internet: avg(v.internet),
+        }
+      })
+  }
+
+  // monthly
+  const buckets = new Map<string, { cpu: number[]; network: number[]; power: number[]; internet: number[] }>()
+  for (const log of logs) {
+    const d = new Date(log.timestamp)
+    const weekNum = Math.ceil(d.getDate() / 7)
+    const weekLabel = `Week ${weekNum}`
+    if (!buckets.has(weekLabel)) {
+      buckets.set(weekLabel, { cpu: [], network: [], power: [], internet: [] })
+    }
+    const b = buckets.get(weekLabel)!
+    b.cpu.push(log.cpu)
+    b.network.push(Math.min(((log.network_in + log.network_out) / 12500) * 100, 100))
+    b.power.push(log.memory)
+    b.internet.push(Math.min(((log.network_in + log.network_out) / 12500) * 100, 100))
+  }
+  return Array.from(buckets.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([week, v]) => ({
+      week,
+      cpu: avg(v.cpu),
+      network: avg(v.network),
+      power: avg(v.power),
+      internet: avg(v.internet),
+    }))
 }
 
-export function UsageCharts({ period }: UsageChartsProps) {
-  const data = period === "daily" ? dailyData : period === "weekly" ? weeklyData : monthlyData
+interface UsageChartsProps {
+  period: "daily" | "weekly" | "monthly"
+  computerId?: string
+}
 
+export function UsageCharts({ period, computerId }: UsageChartsProps) {
+  const [data, setData] = useState<Array<Record<string, string | number>>>([])
+  const [pieData] = useState(defaultPieData)
+  const [, setLoaded] = useState(false)
+
+  const fetchData = useCallback(async () => {
+    try {
+      const limit = period === "daily" ? 500 : period === "weekly" ? 1000 : 1000
+      const res = await getResourceHistory(
+        computerId === "all" ? undefined : computerId,
+        1,
+        limit,
+      )
+      if (res.data && res.data.length > 0) {
+        const aggregated = aggregateLogs(res.data, period)
+        if (aggregated.length > 0) {
+          setData(aggregated)
+        }
+      }
+    } catch {
+      // use defaults on error
+    } finally {
+      setLoaded(true)
+    }
+  }, [period, computerId])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
+
+  const defaultData = period === "daily" ? defaultDailyData : period === "weekly" ? defaultWeeklyData : defaultMonthlyData
+  const chartData = data.length > 0 ? data : defaultData
   const xKey = period === "daily" ? "hour" : period === "weekly" ? "day" : "week"
 
   return (
@@ -108,7 +231,7 @@ export function UsageCharts({ period }: UsageChartsProps) {
         <CardContent>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="cpuGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor={chartColors.cpu.gradient.start} />
@@ -160,7 +283,7 @@ export function UsageCharts({ period }: UsageChartsProps) {
         <CardContent>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis dataKey={xKey} className="text-xs" />
                 <YAxis className="text-xs" />
@@ -193,7 +316,7 @@ export function UsageCharts({ period }: UsageChartsProps) {
         <CardContent>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis dataKey={xKey} className="text-xs" />
                 <YAxis className="text-xs" />
@@ -278,4 +401,3 @@ export function UsageCharts({ period }: UsageChartsProps) {
     </div>
   )
 }
-

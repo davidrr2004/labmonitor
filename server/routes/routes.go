@@ -27,6 +27,7 @@ func SetupRoutes(app *fiber.App) {
 	// Resource routes
 	api.Post("/resource", controllers.PostResource)
 	api.Get("/resources/history", controllers.GetHistory)
+	api.Get("/resources/summary", controllers.GetResourceSummary)
 
 	// Computer management routes (admin only)
 	api.Get("/computers", controllers.GetAllComputers)
