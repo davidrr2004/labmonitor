@@ -25,13 +25,13 @@ func (c *Computer) BeforeCreate(tx *gorm.DB) error {
 		c.ID = uuid.New()
 	}
 	if c.ComputerID == "" {
-		c.ComputerID = generateComputerID(tx, c.College, c.LabName)
+		c.ComputerID = generateComputerID(tx, c.College)
 	}
 	return nil
 }
 
 // generateComputerID builds a human-readable ID like "LAB-CS-001".
-func generateComputerID(db *gorm.DB, college, labName string) string {
+func generateComputerID(db *gorm.DB, college string) string {
 	prefix := "LAB"
 	if college != "" {
 		parts := strings.Fields(strings.ToUpper(college))
@@ -47,7 +47,7 @@ func generateComputerID(db *gorm.DB, college, labName string) string {
 	}
 
 	var count int64
-	db.Model(&Computer{}).Where("college = ? AND lab_name = ?", college, labName).Count(&count)
+	db.Model(&Computer{}).Where("computer_id LIKE ?", prefix+"-%").Count(&count)
 	return fmt.Sprintf("%s-%03d", prefix, count+1)
 }
 
