@@ -3,7 +3,7 @@
 import type React from "react"
 
 import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
+import { usePathname } from "next/navigation"
 import { Activity, BarChart3, Computer, Home, LogOut, Settings, User } from "lucide-react"
 
 import {
@@ -21,19 +21,23 @@ import {
 import { Button } from "@/components/ui/button"
 import { ModeToggle } from "@/components/mode-toggle"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { logout, getStoredUser } from "@/lib/api"
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const router = useRouter()
+  const user = getStoredUser()
+
+  const username = (user?.username as string) || "User"
+  const role = (user?.role as string) || "admin"
+  const initials = username.substring(0, 2).toUpperCase()
 
   const handleLogout = () => {
-    // Here you would typically handle logout logic (clear session, cookies, etc)
-    router.push("/login")
+    logout()
   }
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen bg-background">
+      <div className="flex min-h-screen w-full bg-background">
         <Sidebar>
           <SidebarHeader className="relative flex h-[120px] items-start justify-between border-b px-6 pt-6">
             <div className="relative z-10 flex items-center gap-3">
@@ -97,11 +101,11 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
               <div className="flex items-center gap-3 flex-1">
                 <Avatar className="h-8 w-8">
                   <AvatarImage src="/placeholder.svg?height=32&width=32" alt="User" />
-                  <AvatarFallback>JD</AvatarFallback>
+                  <AvatarFallback>{initials}</AvatarFallback>
                 </Avatar>
                 <div className="flex flex-col text-sm">
-                  <span className="font-medium">John Doe</span>
-                  <span className="text-xs text-muted-foreground">Admin</span>
+                  <span className="font-medium">{username}</span>
+                  <span className="text-xs text-muted-foreground capitalize">{role}</span>
                 </div>
               </div>
               <Button variant="ghost" size="icon" onClick={handleLogout}>
@@ -120,11 +124,10 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
             </div>
           </header>
           <main className="flex-1 overflow-auto">
-            <div className="container mx-auto py-6 px-4 md:px-6 max-w-7xl">{children}</div>
+            <div className="mx-auto py-6 px-4 md:px-6 h-full">{children}</div>
           </main>
         </div>
       </div>
     </SidebarProvider>
   )
 }
-

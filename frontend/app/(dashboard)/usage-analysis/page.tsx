@@ -2,15 +2,6 @@ import { UsageCharts } from "@/components/usage-charts"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
-// Sample systems data
-const systems = [
-  { id: "LAB-PC-01", name: "Lab PC 01" },
-  { id: "LAB-PC-02", name: "Lab PC 02" },
-  { id: "LAB-PC-03", name: "Lab PC 03" },
-  { id: "LAB-PC-04", name: "Lab PC 04" },
-  { id: "LAB-PC-05", name: "Lab PC 05" },
-]
-
 export default function UsageAnalysisPage() {
   return (
     <div className="space-y-6">

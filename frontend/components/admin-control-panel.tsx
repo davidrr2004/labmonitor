@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { CheckCircle2, ChevronDown, Power, RefreshCw, Search, Shield, Trash2, Computer } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -21,18 +21,16 @@ import {
 } from "@/components/ui/dialog"
 import { Progress } from "@/components/ui/progress"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { getComputers } from "@/lib/api"
 
-// Sample data for systems
-const systems = [
-  { id: "LAB-PC-01", status: "online", ip: "192.168.1.101", os: "Windows 10", lastBoot: "2 hours ago" },
-  { id: "LAB-PC-02", status: "online", ip: "192.168.1.102", os: "Windows 10", lastBoot: "3 hours ago" },
-  { id: "LAB-PC-03", status: "offline", ip: "192.168.1.103", os: "Windows 10", lastBoot: "2 days ago" },
-  { id: "LAB-PC-04", status: "online", ip: "192.168.1.104", os: "Windows 10", lastBoot: "1 hour ago" },
-  { id: "LAB-PC-05", status: "offline", ip: "192.168.1.105", os: "Windows 10", lastBoot: "1 day ago" },
-  { id: "LAB-PC-06", status: "online", ip: "192.168.1.106", os: "Windows 10", lastBoot: "5 hours ago" },
-  { id: "LAB-PC-07", status: "online", ip: "192.168.1.107", os: "Windows 10", lastBoot: "4 hours ago" },
-  { id: "LAB-PC-08", status: "online", ip: "192.168.1.108", os: "Windows 10", lastBoot: "6 hours ago" },
-]
+interface SystemEntry {
+  id: string
+  status: string
+  system_id: string
+  college: string
+  lab_name: string
+  last_seen: string
+}
 
 // Sample data for processes
 const processes = [
@@ -54,12 +52,33 @@ export function AdminControlPanel() {
   const [targetId, setTargetId] = useState<string | number | null>(null)
   const [isActionInProgress, setIsActionInProgress] = useState(false)
   const [actionProgress, setActionProgress] = useState(0)
+  const [systems, setSystems] = useState<SystemEntry[]>([])
+
+  useEffect(() => {
+    const fetchSystems = async () => {
+      try {
+        const result = await getComputers()
+        const mapped = (result.data || []).map((c) => ({
+          id: c.system_id,
+          status: c.is_online ? "online" : "offline",
+          system_id: c.system_id,
+          college: c.college,
+          lab_name: c.lab_name,
+          last_seen: c.last_seen,
+        }))
+        setSystems(mapped)
+      } catch { /* keep existing */ }
+    }
+    fetchSystems()
+    const interval = setInterval(fetchSystems, 10000)
+    return () => clearInterval(interval)
+  }, [])
 
   const filteredSystems = systems.filter(
     (system) =>
       system.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      system.ip.includes(searchTerm) ||
-      system.os.toLowerCase().includes(searchTerm.toLowerCase()),
+      system.college.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      system.lab_name.toLowerCase().includes(searchTerm.toLowerCase()),
   )
 
   const handleSystemAction = (action: "shutdown" | "restart", id: string) => {
@@ -138,9 +157,9 @@ export function AdminControlPanel() {
                   <TableRow>
                     <TableHead className="w-[100px]">System ID</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>IP Address</TableHead>
-                    <TableHead className="hidden md:table-cell">Operating System</TableHead>
-                    <TableHead className="hidden md:table-cell">Last Boot</TableHead>
+                    <TableHead>College</TableHead>
+                    <TableHead className="hidden md:table-cell">Lab Name</TableHead>
+                    <TableHead className="hidden md:table-cell">Last Seen</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -155,9 +174,9 @@ export function AdminControlPanel() {
                       <TableCell>
                         <Badge variant={system.status === "online" ? "secondary" : "destructive"}>{system.status}</Badge>
                       </TableCell>
-                      <TableCell>{system.ip}</TableCell>
-                      <TableCell className="hidden md:table-cell">{system.os}</TableCell>
-                      <TableCell className="hidden md:table-cell">{system.lastBoot}</TableCell>
+                      <TableCell>{system.college}</TableCell>
+                      <TableCell className="hidden md:table-cell">{system.lab_name}</TableCell>
+                      <TableCell className="hidden md:table-cell">{system.last_seen ? new Date(system.last_seen).toLocaleString() : "N/A"}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           <Button

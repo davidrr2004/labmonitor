@@ -1,10 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { MoreHorizontal, Power, RefreshCw } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
   DropdownMenu,
@@ -15,63 +14,41 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
+import { getComputers } from "@/lib/api"
 
-// Sample data for systems
-const systems = [
-  {
-    id: "LAB-PC-01",
-    status: "online",
-    cpuUsage: 42,
-    memoryUsage: 35,
-    networkUsage: 20,
-    lastActive: "2 minutes ago",
-  },
-  {
-    id: "LAB-PC-02",
-    status: "online",
-    cpuUsage: 28,
-    memoryUsage: 45,
-    networkUsage: 15,
-    lastActive: "5 minutes ago",
-  },
-  {
-    id: "LAB-PC-03",
-    status: "offline",
-    cpuUsage: 0,
-    memoryUsage: 0,
-    networkUsage: 0,
-    lastActive: "2 hours ago",
-  },
-  {
-    id: "LAB-PC-04",
-    status: "online",
-    cpuUsage: 92,
-    memoryUsage: 78,
-    networkUsage: 65,
-    lastActive: "1 minute ago",
-  },
-  {
-    id: "LAB-PC-05",
-    status: "offline",
-    cpuUsage: 0,
-    memoryUsage: 0,
-    networkUsage: 0,
-    lastActive: "32 minutes ago",
-  },
-]
+interface SystemData {
+  id: string
+  system_id: string
+  college: string
+  lab_name: string
+  last_seen: string
+  is_online: boolean
+  created_at: string
+}
 
 export function SystemsOverview() {
-  const [systemsData, setSystemsData] = useState(systems)
+  const [systemsData, setSystemsData] = useState<SystemData[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const getStatusVariant = (status: string) => {
-    return status === "online" ? "secondary" : "destructive"
+  const fetchSystems = async () => {
+    try {
+      const result = await getComputers()
+      setSystemsData(result.data || [])
+    } catch {
+      // Keep existing data on error
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const getUsageColor = (usage: number) => {
-    if (usage >= 80) return "bg-red-500"
-    if (usage >= 60) return "bg-orange-500"
-    if (usage >= 40) return "bg-yellow-500"
-    return "bg-green-500"
+  useEffect(() => {
+    fetchSystems()
+    const interval = setInterval(fetchSystems, 10000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const getStatusVariant = (isOnline: boolean) => {
+    return isOnline ? "secondary" : "destructive"
   }
 
   const handleRestart = (id: string) => {
@@ -82,6 +59,20 @@ export function SystemsOverview() {
     alert(`Shutting down system ${id}`)
   }
 
+  const getTimeAgo = (timestamp: string): string => {
+    const diff = Date.now() - new Date(timestamp).getTime()
+    const minutes = Math.floor(diff / 60000)
+    if (minutes < 1) return "just now"
+    if (minutes < 60) return `${minutes} min ago`
+    const hours = Math.floor(minutes / 60)
+    if (hours < 24) return `${hours}h ago`
+    const days = Math.floor(hours / 24)
+    return `${days}d ago`
+  }
+
+  const onlineCount = systemsData.filter((s) => s.is_online).length
+  const offlineCount = systemsData.filter((s) => !s.is_online).length
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -91,16 +82,16 @@ export function SystemsOverview() {
             variant="outline"
             className="bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800"
           >
-            {systemsData.filter((s) => s.status === "online").length} Online
+            {onlineCount} Online
           </Badge>
           <Badge
             variant="outline"
             className="bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800"
           >
-            {systemsData.filter((s) => s.status === "offline").length} Offline
+            {offlineCount} Offline
           </Badge>
         </div>
-        <Button variant="outline" size="sm">
+        <Button variant="outline" size="sm" onClick={fetchSystems} disabled={loading}>
           <RefreshCw className="mr-2 h-4 w-4" />
           Refresh
         </Button>
@@ -112,79 +103,59 @@ export function SystemsOverview() {
             <TableRow>
               <TableHead>System ID</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>CPU Usage</TableHead>
-              <TableHead>Memory Usage</TableHead>
-              <TableHead>Network Usage</TableHead>
+              <TableHead>College</TableHead>
+              <TableHead>Lab Name</TableHead>
               <TableHead>Last Active</TableHead>
               <TableHead className="w-[80px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {systemsData.map((system) => (
-              <TableRow key={system.id}>
-                <TableCell className="font-medium">{system.id}</TableCell>
-                <TableCell>
-                  <Badge variant={getStatusVariant(system.status)}>{system.status}</Badge>
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <Progress
-                      value={system.cpuUsage}
-                      className="h-2 w-16"
-                      indicatorClassName={getUsageColor(system.cpuUsage)}
-                    />
-                    <span className="text-xs">{system.cpuUsage}%</span>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <Progress
-                      value={system.memoryUsage}
-                      className="h-2 w-16"
-                      indicatorClassName={getUsageColor(system.memoryUsage)}
-                    />
-                    <span className="text-xs">{system.memoryUsage}%</span>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <Progress
-                      value={system.networkUsage}
-                      className="h-2 w-16"
-                      indicatorClassName={getUsageColor(system.networkUsage)}
-                    />
-                    <span className="text-xs">{system.networkUsage}%</span>
-                  </div>
-                </TableCell>
-                <TableCell className="text-sm">{system.lastActive}</TableCell>
-                <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon">
-                        <MoreHorizontal className="h-4 w-4" />
-                        <span className="sr-only">Actions</span>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => handleRestart(system.id)}>
-                        <RefreshCw className="mr-2 h-4 w-4" />
-                        Restart
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleShutdown(system.id)}>
-                        <Power className="mr-2 h-4 w-4" />
-                        Shutdown
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+            {systemsData.length === 0 && !loading ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                  No systems registered yet. Run the monitoring agent to register a system.
                 </TableCell>
               </TableRow>
-            ))}
+            ) : (
+              systemsData.map((system) => (
+                <TableRow key={system.id}>
+                  <TableCell className="font-medium">{system.system_id}</TableCell>
+                  <TableCell>
+                    <Badge variant={getStatusVariant(system.is_online)}>
+                      {system.is_online ? "online" : "offline"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>{system.college}</TableCell>
+                  <TableCell>{system.lab_name}</TableCell>
+                  <TableCell className="text-sm">{getTimeAgo(system.last_seen)}</TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <MoreHorizontal className="h-4 w-4" />
+                          <span className="sr-only">Actions</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => handleRestart(system.system_id)}>
+                          <RefreshCw className="mr-2 h-4 w-4" />
+                          Restart
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleShutdown(system.system_id)}>
+                          <Power className="mr-2 h-4 w-4" />
+                          Shutdown
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </div>
     </div>
   )
 }
-

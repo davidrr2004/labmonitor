@@ -24,6 +24,9 @@ func SetupRoutes(app *fiber.App) {
 	//admin := protected.Use(middleware.AdminOnly())
 	api.Post("/signup", controllers.Signup)
 
+	// Dashboard summary
+	api.Get("/dashboard", controllers.GetDashboardSummary)
+
 	// Resource routes
 	api.Post("/resource", controllers.PostResource)
 	api.Get("/resources/history", controllers.GetHistory)

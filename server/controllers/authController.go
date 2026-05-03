@@ -51,13 +51,21 @@ func Signup(c *fiber.Ctx) error {
 
 	if err := config.DB.Create(&user).Error; err != nil {
 		utils.LogError("Failed to create user: %v", err)
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+			"error": "Username already registered",
+		})
+	}
+
+	token, err := utils.GenerateToken(user.ID, user.Username, user.Role)
+	if err != nil {
+		utils.LogError("Failed to generate token: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to create user",
+			"error": "Internal server error",
 		})
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-		"message": "User created successfully",
+		"token": token,
 		"user": fiber.Map{
 			"id":       user.ID,
 			"username": user.Username,

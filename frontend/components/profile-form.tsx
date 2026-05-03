@@ -2,8 +2,9 @@
 
 import { Badge } from "@/components/ui/badge"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { User } from "lucide-react"
+import { getStoredUser } from "@/lib/api"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -16,16 +17,28 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 export function ProfileForm() {
   const [isEditing, setIsEditing] = useState(false)
 
-  // Sample admin data
   const [adminData, setAdminData] = useState({
-    name: "John Doe",
-    email: "john.doe@university.edu",
-    id: "ADMIN-2023-001",
-    department: "Computer Science",
-    phone: "+1 (555) 123-4567",
-    bio: "Lab administrator with 5 years of experience managing computer resources and maintaining system security.",
-    role: "Senior Lab Administrator",
+    name: "",
+    email: "",
+    id: "",
+    department: "",
+    phone: "",
+    bio: "",
+    role: "",
   })
+
+  useEffect(() => {
+    const user = getStoredUser()
+    if (user) {
+      setAdminData((prev) => ({
+        ...prev,
+        name: (user.username as string) || "",
+        email: (user.username as string) || "",
+        id: (user.id as string) || "",
+        role: (user.role as string) || "admin",
+      }))
+    }
+  }, [])
 
   const handleSave = () => {
     setIsEditing(false)

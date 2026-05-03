@@ -3,22 +3,63 @@
 import { useState } from "react"
 import Link from "next/link"
 import { Activity, Eye, EyeOff } from "lucide-react"
-import { useRouter } from "next/navigation"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { login, register } from "@/lib/api"
 
 export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false)
-  const router = useRouter()
+  const [error, setError] = useState("")
+  const [loading, setLoading] = useState(false)
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    // For now, just redirect to dashboard without any validation
-    router.push("/dashboard")
+    setError("")
+    setLoading(true)
+    const form = e.target as HTMLFormElement
+    const email = (form.querySelector("#email") as HTMLInputElement)?.value
+    const password = (form.querySelector("#password") as HTMLInputElement)?.value
+    try {
+      await login(email, password)
+      window.location.href = "/dashboard"
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Login failed")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError("")
+    setLoading(true)
+    const form = e.target as HTMLFormElement
+    const email = (form.querySelector("#reg-email") as HTMLInputElement)?.value
+    const password = (form.querySelector("#reg-password") as HTMLInputElement)?.value
+    const confirmPassword = (form.querySelector("#confirm-password") as HTMLInputElement)?.value
+
+    if (password !== confirmPassword) {
+      setError("Passwords do not match")
+      setLoading(false)
+      return
+    }
+
+    try {
+      await register({
+        username: email,
+        password,
+        role: "admin",
+      })
+      window.location.href = "/dashboard"
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Registration failed")
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -34,6 +75,11 @@ export function LoginForm() {
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {error && (
+          <div className="mb-4 rounded-md bg-destructive/15 p-3 text-sm text-destructive">
+            {error}
+          </div>
+        )}
         <Tabs defaultValue="login" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="login">Login</TabsTrigger>
@@ -41,10 +87,10 @@ export function LoginForm() {
           </TabsList>
 
           <TabsContent value="login" className="mt-4">
-            <div className="space-y-4">
+            <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" placeholder="admin@university.edu" />
+                <Input id="email" type="email" placeholder="admin@university.edu" required />
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -54,7 +100,7 @@ export function LoginForm() {
                   </Link>
                 </div>
                 <div className="relative">
-                  <Input id="password" type={showPassword ? "text" : "password"} placeholder="••••••••" />
+                  <Input id="password" type={showPassword ? "text" : "password"} placeholder="••••••••" required />
                   <Button
                     variant="ghost"
                     size="icon"
@@ -71,12 +117,14 @@ export function LoginForm() {
                   </Button>
                 </div>
               </div>
-              <Button className="w-full" onClick={handleLogin}>Login</Button>
-            </div>
+              <Button className="w-full" type="submit" disabled={loading}>
+                {loading ? "Logging in..." : "Login"}
+              </Button>
+            </form>
           </TabsContent>
 
           <TabsContent value="register" className="mt-4">
-            <div className="space-y-4">
+            <form onSubmit={handleRegister} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="first-name">First name</Label>
@@ -89,7 +137,7 @@ export function LoginForm() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="reg-email">Email</Label>
-                <Input id="reg-email" type="email" placeholder="admin@university.edu" />
+                <Input id="reg-email" type="email" placeholder="admin@university.edu" required />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="admin-id">Admin ID</Label>
@@ -98,7 +146,7 @@ export function LoginForm() {
               <div className="space-y-2">
                 <Label htmlFor="reg-password">Password</Label>
                 <div className="relative">
-                  <Input id="reg-password" type={showPassword ? "text" : "password"} placeholder="••••••••" />
+                  <Input id="reg-password" type={showPassword ? "text" : "password"} placeholder="••••••••" required />
                   <Button
                     variant="ghost"
                     size="icon"
@@ -117,10 +165,12 @@ export function LoginForm() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="confirm-password">Confirm Password</Label>
-                <Input id="confirm-password" type="password" placeholder="••••••••" />
+                <Input id="confirm-password" type="password" placeholder="••••••••" required />
               </div>
-              <Button className="w-full">Register</Button>
-            </div>
+              <Button className="w-full" type="submit" disabled={loading}>
+                {loading ? "Registering..." : "Register"}
+              </Button>
+            </form>
           </TabsContent>
         </Tabs>
       </CardContent>
@@ -140,4 +190,3 @@ export function LoginForm() {
     </Card>
   )
 }
-
