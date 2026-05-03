@@ -1,6 +1,8 @@
 package models
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,7 +24,31 @@ func (c *Computer) BeforeCreate(tx *gorm.DB) error {
 	if c.ID == uuid.Nil {
 		c.ID = uuid.New()
 	}
+	if c.ComputerID == "" {
+		c.ComputerID = generateComputerID(tx, c.College, c.LabName)
+	}
 	return nil
+}
+
+// generateComputerID builds a human-readable ID like "LAB-CS-001".
+func generateComputerID(db *gorm.DB, college, labName string) string {
+	prefix := "LAB"
+	if college != "" {
+		parts := strings.Fields(strings.ToUpper(college))
+		abbr := ""
+		for _, p := range parts {
+			if len(p) > 0 {
+				abbr += string(p[0])
+			}
+		}
+		if abbr != "" {
+			prefix = "LAB-" + abbr
+		}
+	}
+
+	var count int64
+	db.Model(&Computer{}).Where("college = ? AND lab_name = ?", college, labName).Count(&count)
+	return fmt.Sprintf("%s-%03d", prefix, count+1)
 }
 
 // RegisterComputer creates a new computer record in the database

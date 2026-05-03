@@ -47,13 +47,7 @@ func InitDB() {
 		log.Fatal("Failed to create extension: ", err)
 	}
 
-	// Drop existing tables to start fresh
-	err = DB.Exec("DROP TABLE IF EXISTS internet_usages, alerts, resource_logs, computers, users CASCADE;").Error
-	if err != nil {
-		log.Fatal("Failed to drop tables: ", err)
-	}
-
-	// Create tables with proper references
+	// Migrate tables (additive only — never drops existing data)
 	createSchema()
 
 	log.Println("Database connection established successfully")
