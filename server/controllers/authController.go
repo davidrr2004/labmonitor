@@ -1,6 +1,8 @@
 package controllers
 
 import (
+	"strings"
+
 	"github.com/Frhnmj2004/LabMonitoring-server/config"
 	"github.com/Frhnmj2004/LabMonitoring-server/models"
 	"github.com/Frhnmj2004/LabMonitoring-server/utils"
@@ -51,8 +53,13 @@ func Signup(c *fiber.Ctx) error {
 
 	if err := config.DB.Create(&user).Error; err != nil {
 		utils.LogError("Failed to create user: %v", err)
-		return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-			"error": "Username already registered",
+		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "23505") {
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+				"error": "Username already registered",
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to create user",
 		})
 	}
 

@@ -1,6 +1,7 @@
 package models
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -21,6 +22,9 @@ type Computer struct {
 func (c *Computer) BeforeCreate(tx *gorm.DB) error {
 	if c.ID == uuid.Nil {
 		c.ID = uuid.New()
+	}
+	if c.ComputerID == "" {
+		c.ComputerID = fmt.Sprintf("LAB-%s", uuid.New().String()[:8])
 	}
 	return nil
 }
