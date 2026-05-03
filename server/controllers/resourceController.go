@@ -42,8 +42,7 @@ func PostResource(c *fiber.Ctx) error {
 		})
 	}
 
-	computer.LastSeen = time.Now()
-	if err := config.DB.Save(&computer).Error; err != nil {
+	if err := computer.UpdateLastSeen(config.DB); err != nil {
 		utils.LogError("Failed to update computer last seen: %v", err)
 	}
 
@@ -55,7 +54,6 @@ func PostResource(c *fiber.Ctx) error {
 		NetworkIn:  data.NetworkIn,
 		NetworkOut: data.NetworkOut,
 		Timestamp:  time.Now(),
-		Computer:   computer,
 	}
 
 	// Try to save to database
