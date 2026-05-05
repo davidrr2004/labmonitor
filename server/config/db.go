@@ -83,4 +83,22 @@ func createSchema() {
 	if err != nil {
 		log.Fatal("Failed to create InternetUsage table: ", err)
 	}
+
+	// Create Command model
+	err = DB.AutoMigrate(&models.Command{})
+	if err != nil {
+		log.Fatal("Failed to create Command table: ", err)
+	}
+
+	// Create AppUsageSnapshot model
+	err = DB.AutoMigrate(&models.AppUsageSnapshot{})
+	if err != nil {
+		log.Fatal("Failed to create AppUsageSnapshot table: ", err)
+	}
+
+	// Create AppUsageEntry model
+	err = DB.AutoMigrate(&models.AppUsageEntry{})
+	if err != nil {
+		log.Fatal("Failed to create AppUsageEntry table: ", err)
+	}
 }

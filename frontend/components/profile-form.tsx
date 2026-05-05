@@ -48,7 +48,7 @@ export function ProfileForm() {
 
   return (
     <Tabs defaultValue="profile" className="w-full">
-      <TabsList className="grid w-full max-w-md grid-cols-2">
+      <TabsList className="grid w-full grid-cols-2">
         <TabsTrigger value="profile">Profile</TabsTrigger>
         <TabsTrigger value="security">Security</TabsTrigger>
       </TabsList>

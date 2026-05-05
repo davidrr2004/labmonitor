@@ -44,6 +44,15 @@ func SetupRoutes(app *fiber.App) {
 	api.Post("/internet-usage", controllers.PostInternetUsage)
 	api.Get("/internet-usage", controllers.GetInternetUsage)
 
+	// Command queue routes
+	api.Post("/commands", controllers.CreateCommand)
+	api.Get("/commands/:id", controllers.GetCommand)
+	api.Post("/agent/commands/poll", controllers.PollCommands)
+
+	// App usage routes
+	api.Post("/app-usage", controllers.PostAppUsageSnapshot)
+	api.Get("/app-usage/latest", controllers.GetLatestAppUsage)
+
 	// WebSocket setup
 	app.Use("/ws", func(c *fiber.Ctx) error {
 		if fiberwebsocket.IsWebSocketUpgrade(c) {

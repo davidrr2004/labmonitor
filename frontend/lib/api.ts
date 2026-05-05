@@ -206,6 +206,90 @@ export async function resolveAlert(
   return apiFetch(`/alerts/${id}/resolve`, { method: "PUT" })
 }
 
+// ─── Command API ────────────────────────────────────────────────────────────
+
+export interface Command {
+  id: string
+  system_id: string
+  type: string
+  status: string
+  requested_by: string
+  created_at: string
+  completed_at: string | null
+}
+
+export async function createCommand(
+  systemId: string,
+  type: string,
+): Promise<{ command_id: string; status: string }> {
+  return apiFetch("/commands", {
+    method: "POST",
+    body: JSON.stringify({ system_id: systemId, type }),
+  })
+}
+
+export async function getCommandStatus(id: string): Promise<Command> {
+  return apiFetch(`/commands/${id}`)
+}
+
+// ─── App Usage API ──────────────────────────────────────────────────────────
+
+export interface AppUsageSnapshot {
+  id: string
+  system_id: string
+  command_id: string
+  captured_at: string
+}
+
+export interface AppUsageEntry {
+  id: string
+  snapshot_id: string
+  name: string
+  pid: number
+  cpu: number
+  memory_mb: number
+  username: string
+  created_at: string
+}
+
+export interface AppUsageResult {
+  snapshot: AppUsageSnapshot
+  entries: AppUsageEntry[]
+}
+
+export async function getLatestAppUsage(
+  systemId: string,
+): Promise<AppUsageResult> {
+  return apiFetch(`/app-usage/latest?system_id=${encodeURIComponent(systemId)}`)
+}
+
+/**
+ * Orchestrates the full app-usage flow:
+ * 1. Create an APP_USAGE_SNAPSHOT command
+ * 2. Poll until the command status is "done"
+ * 3. Fetch and return the latest snapshot
+ */
+export async function requestAppUsage(
+  systemId: string,
+  maxRetries: number = 15,
+): Promise<AppUsageResult> {
+  const cmd = await createCommand(systemId, "APP_USAGE_SNAPSHOT")
+
+  let status = "queued"
+  let tries = 0
+  while (status !== "done" && tries < maxRetries) {
+    await new Promise((r) => setTimeout(r, 1000))
+    const cmdStatus = await getCommandStatus(cmd.command_id)
+    status = cmdStatus.status
+    tries++
+  }
+
+  if (status === "done") {
+    return getLatestAppUsage(systemId)
+  }
+  throw new Error("Timed out waiting for app usage snapshot")
+}
+
 // ─── WebSocket ──────────────────────────────────────────────────────────────
 
 export type WSMessage =
@@ -235,3 +319,4 @@ export function connectWebSocket(
 
   return ws
 }
+

@@ -51,6 +51,7 @@ export default function DashboardPage() {
   const [chartData, setChartData] = useState<
     Array<{ time: string; cpu: number; network: number; power: number }>
   >([])
+  const [networkLoad, setNetworkLoad] = useState(0)
   const [loading, setLoading] = useState(true)
 
   const fetchData = useCallback(async () => {
@@ -65,6 +66,13 @@ export default function DashboardPage() {
       // Fetch recent resource history for the chart
       const historyRes = await getResourceHistory(undefined, 1, 200)
       if (historyRes.data && historyRes.data.length > 0) {
+        const maxNetwork = Math.max(
+          ...historyRes.data.map((entry) => entry.network_in + entry.network_out),
+        )
+        const latest = historyRes.data[0]
+        const latestNetwork = latest.network_in + latest.network_out
+        setNetworkLoad(maxNetwork > 0 ? Math.round((latestNetwork / maxNetwork) * 100) : 0)
+
         const buckets = new Map<
           string,
           { cpu: number[]; network: number[]; memory: number[] }
@@ -77,7 +85,7 @@ export default function DashboardPage() {
           }
           const b = buckets.get(hour)!
           b.cpu.push(log.cpu)
-          b.network.push(Math.min(((log.network_in + log.network_out) / 12500) * 100, 100))
+          b.network.push(log.network_in + log.network_out)
           b.memory.push(log.memory)
         }
         const avg = (arr: number[]) =>
@@ -89,7 +97,7 @@ export default function DashboardPage() {
           .map(([time, v]) => ({
             time,
             cpu: avg(v.cpu),
-            network: avg(v.network),
+            network: maxNetwork > 0 ? Math.round((avg(v.network) / maxNetwork) * 100) : 0,
             power: avg(v.memory),
           }))
         setChartData(sorted)
@@ -122,8 +130,6 @@ export default function DashboardPage() {
 
   const totalSystems = summary?.total_systems ?? 0
   const avgCPU = summary?.averages?.cpu ?? 0
-  const avgNetworkRaw = summary?.averages?.network ?? 0
-  const avgNetwork = Math.min(Math.round((avgNetworkRaw / 12500) * 100), 100)
   const avgMemory = summary?.averages?.memory ?? 0
 
   return (
@@ -147,12 +153,12 @@ export default function DashboardPage() {
         />
         <SystemStatusCard
           title="Network Load"
-          value={loading ? "..." : `${Math.round(avgNetwork)}%`}
-          status={getStatusForValue(avgNetwork)}
+          value={loading ? "..." : `${Math.round(networkLoad)}%`}
+          status={getStatusForValue(networkLoad)}
           icon={<Network className="h-4 w-4" />}
         />
         <SystemStatusCard
-          title="Power Usage"
+          title="Memory Usage"
           value={loading ? "..." : `${Math.round(avgMemory)}%`}
           status={getStatusForValue(avgMemory)}
           icon={<Power className="h-4 w-4" />}

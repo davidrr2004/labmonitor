@@ -5,6 +5,9 @@ LabMonitor Agent — lightweight system monitoring script.
 Collects CPU, memory, and network metrics from the host machine
 and sends them to the LabMonitor server at a configurable interval.
 
+Also polls the server for commands (e.g. APP_USAGE_SNAPSHOT, RESTART,
+SHUTDOWN) and executes them locally.
+
 Usage:
     python agent.py --server-url http://your-server:8080 --computer-id LAB-CS-001
     python agent.py --server-url http://your-server:8080 --computer-id LAB-CS-001 --interval 15
@@ -95,6 +98,113 @@ def send_metrics(server_url, computer_id, metrics):
         return False
 
 
+# ─── Command handling ────────────────────────────────────────────────────────
+
+
+def poll_commands(server_url, computer_id):
+    """Poll the server for queued commands destined for this computer."""
+    url = f"{server_url.rstrip('/')}/api/v1/agent/commands/poll"
+    payload = json.dumps({"system_id": computer_id}).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+            return body.get("commands", [])
+    except Exception as exc:
+        logger.warning("Failed to poll commands: %s", exc)
+        return []
+
+
+def collect_process_snapshot(top_n=10):
+    """Collect the top N processes sorted by CPU usage."""
+    procs = []
+    for p in psutil.process_iter(attrs=["pid", "name", "username"]):
+        try:
+            cpu = p.cpu_percent(interval=0)
+            mem_mb = p.memory_info().rss / (1024 * 1024)
+            procs.append({
+                "name": p.info["name"] or "unknown",
+                "pid": p.info["pid"],
+                "cpu": round(cpu, 2),
+                "memory_mb": round(mem_mb, 2),
+                "username": p.info.get("username") or "",
+            })
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+
+    # Sort by CPU descending, keep top N
+    procs.sort(key=lambda x: x["cpu"], reverse=True)
+    return procs[:top_n]
+
+
+def send_app_usage(server_url, system_id, command_id, processes):
+    """POST a process snapshot back to the server."""
+    url = f"{server_url.rstrip('/')}/api/v1/app-usage"
+    payload = {
+        "system_id": system_id,
+        "command_id": command_id,
+        "captured_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "processes": processes,
+    }
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            if resp.status == 200:
+                logger.info("App usage snapshot sent successfully.")
+                return True
+            logger.warning("Server returned status %s for app-usage.", resp.status)
+            return False
+    except Exception as exc:
+        logger.warning("Failed to send app usage snapshot: %s", exc)
+        return False
+
+
+def handle_commands(server_url, computer_id):
+    """Poll for commands and dispatch each one."""
+    commands = poll_commands(server_url, computer_id)
+    if not commands:
+        return
+
+    logger.info("Received %d command(s).", len(commands))
+    for cmd in commands:
+        cmd_type = cmd.get("type", "")
+        cmd_id = cmd.get("id", "")
+        logger.info("Processing command %s (type=%s)", cmd_id, cmd_type)
+
+        if cmd_type == "APP_USAGE_SNAPSHOT":
+            processes = collect_process_snapshot(top_n=10)
+            send_app_usage(server_url, computer_id, cmd_id, processes)
+
+        elif cmd_type == "RESTART":
+            logger.warning("RESTART command received — stub only, not executing.")
+            # Uncomment to actually restart:
+            # import subprocess
+            # subprocess.run(["shutdown", "-r", "now"])
+
+        elif cmd_type == "SHUTDOWN":
+            logger.warning("SHUTDOWN command received — stub only, not executing.")
+            # Uncomment to actually shutdown:
+            # import subprocess
+            # subprocess.run(["shutdown", "-h", "now"])
+
+        else:
+            logger.warning("Unknown command type: %s", cmd_type)
+
+
+# ─── Main loop ───────────────────────────────────────────────────────────────
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="LabMonitor Agent — collect and report system metrics.",
@@ -146,6 +256,7 @@ def main():
     backoff = 0
 
     while _running:
+        # ── Collect and send resource metrics ──
         metrics, prev_net = collect_metrics(prev_net)
         logger.info(
             "CPU=%.1f%%  MEM=%.1f%%  NET_IN=%.0fB  NET_OUT=%.0fB",
@@ -163,6 +274,9 @@ def main():
             extra = 2**backoff
             logger.info("Retrying in %ds (backoff).", extra)
             _sleep(extra)
+
+        # ── Poll for and handle commands ──
+        handle_commands(args.server_url, args.computer_id)
 
         _sleep(args.interval)
 

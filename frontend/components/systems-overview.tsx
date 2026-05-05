@@ -18,6 +18,8 @@ import { Badge } from "@/components/ui/badge"
 import {
   getComputers,
   getResourceHistory,
+  connectWebSocket,
+  type WSMessage,
   type Computer,
 } from "@/lib/api"
 
@@ -47,7 +49,8 @@ export function SystemsOverview() {
   const [systemsData, setSystemsData] = useState<SystemDisplay[]>([])
   const [loading, setLoading] = useState(true)
 
-  const fetchSystems = useCallback(async () => {
+  const fetchSystems = useCallback(async (showLoading = false) => {
+    if (showLoading) setLoading(true)
     try {
       const computersRes = await getComputers()
       const computers = computersRes.data || []
@@ -61,17 +64,18 @@ export function SystemsOverview() {
 
           if (comp.is_online) {
             try {
-              const historyRes = await getResourceHistory(comp.system_id, 1, 1)
+              const historyRes = await getResourceHistory(comp.system_id, 1, 20)
               if (historyRes.data && historyRes.data.length > 0) {
                 const latest = historyRes.data[0]
+                const maxNetwork = Math.max(
+                  ...historyRes.data.map((entry) => entry.network_in + entry.network_out),
+                )
+                const latestNetwork = latest.network_in + latest.network_out
                 cpuUsage = Math.round(latest.cpu)
                 memoryUsage = Math.round(latest.memory)
-                networkUsage = Math.round(
-                  Math.min(
-                    ((latest.network_in + latest.network_out) / 12500) * 100,
-                    100,
-                  ),
-                )
+                networkUsage = maxNetwork > 0
+                  ? Math.round((latestNetwork / maxNetwork) * 100)
+                  : 0
               }
             } catch {
               // use defaults
@@ -93,12 +97,23 @@ export function SystemsOverview() {
     } catch {
       // keep empty state on error
     } finally {
-      setLoading(false)
+      if (showLoading) setLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    fetchSystems()
+    fetchSystems(true)
+    const ws = connectWebSocket((msg: WSMessage) => {
+      if (msg.type === "resource_update") {
+        fetchSystems()
+      }
+    })
+    const interval = setInterval(() => fetchSystems(), 10000)
+
+    return () => {
+      ws?.close()
+      clearInterval(interval)
+    }
   }, [fetchSystems])
 
   const getStatusVariant = (status: string) => {
@@ -138,7 +153,7 @@ export function SystemsOverview() {
             {systemsData.filter((s) => s.status === "offline").length} Offline
           </Badge>
         </div>
-        <Button variant="outline" size="sm" onClick={() => { setLoading(true); fetchSystems() }}>
+        <Button variant="outline" size="sm" onClick={() => fetchSystems(true)}>
           <RefreshCw className="mr-2 h-4 w-4" />
           Refresh
         </Button>

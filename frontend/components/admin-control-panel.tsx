@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { CheckCircle2, ChevronDown, Power, RefreshCw, Search, Shield, Trash2, Computer } from "lucide-react"
+import { CheckCircle2, ChevronDown, Power, RefreshCw, Search, Shield, Trash2, Computer, Activity, Loader2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -23,7 +23,10 @@ import { Progress } from "@/components/ui/progress"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   getComputers,
+  requestAppUsage,
+  createCommand,
   type Computer as ComputerType,
+  type AppUsageEntry,
 } from "@/lib/api"
 
 interface SystemDisplay {
@@ -33,18 +36,6 @@ interface SystemDisplay {
   os: string
   lastBoot: string
 }
-
-// Sample data for processes (no backend endpoint for process management)
-const processes = [
-  { id: 1, name: "chrome.exe", cpu: 12.5, memory: 350, user: "student", status: "running" },
-  { id: 2, name: "vscode.exe", cpu: 8.2, memory: 280, user: "student", status: "running" },
-  { id: 3, name: "explorer.exe", cpu: 1.5, memory: 120, user: "system", status: "running" },
-  { id: 4, name: "java.exe", cpu: 15.8, memory: 420, user: "student", status: "running" },
-  { id: 5, name: "python.exe", cpu: 5.3, memory: 180, user: "student", status: "running" },
-  { id: 6, name: "svchost.exe", cpu: 0.8, memory: 90, user: "system", status: "running" },
-  { id: 7, name: "node.exe", cpu: 7.2, memory: 250, user: "student", status: "running" },
-  { id: 8, name: "malware.exe", cpu: 25.0, memory: 500, user: "unknown", status: "suspicious" },
-]
 
 function formatTimeAgo(timestamp: string): string {
   const date = new Date(timestamp)
@@ -63,12 +54,19 @@ export function AdminControlPanel() {
   const [systems, setSystems] = useState<SystemDisplay[]>([])
   const [selectedSystem, setSelectedSystem] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
+  const [processSearch, setProcessSearch] = useState("")
   const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false)
   const [actionType, setActionType] = useState<"shutdown" | "restart" | "terminate" | null>(null)
   const [targetId, setTargetId] = useState<string | number | null>(null)
   const [isActionInProgress, setIsActionInProgress] = useState(false)
   const [actionProgress, setActionProgress] = useState(0)
   const [loading, setLoading] = useState(true)
+
+  // App usage state
+  const [processes, setProcesses] = useState<AppUsageEntry[]>([])
+  const [appUsageLoading, setAppUsageLoading] = useState(false)
+  const [appUsageError, setAppUsageError] = useState<string | null>(null)
+  const [snapshotTime, setSnapshotTime] = useState<string | null>(null)
 
   const fetchSystems = useCallback(async () => {
     try {
@@ -93,11 +91,25 @@ export function AdminControlPanel() {
     fetchSystems()
   }, [fetchSystems])
 
+  // Reset process data when selecting a different system
+  useEffect(() => {
+    setProcesses([])
+    setAppUsageError(null)
+    setSnapshotTime(null)
+    setProcessSearch("")
+  }, [selectedSystem])
+
   const filteredSystems = systems.filter(
     (system) =>
       system.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       system.ip.includes(searchTerm) ||
       system.os.toLowerCase().includes(searchTerm.toLowerCase()),
+  )
+
+  const filteredProcesses = processes.filter(
+    (p) =>
+      p.name.toLowerCase().includes(processSearch.toLowerCase()) ||
+      p.username.toLowerCase().includes(processSearch.toLowerCase()),
   )
 
   const handleSystemAction = (action: "shutdown" | "restart", id: string) => {
@@ -106,16 +118,42 @@ export function AdminControlPanel() {
     setIsConfirmDialogOpen(true)
   }
 
-  const handleTerminateProcess = (id: number) => {
+  const handleTerminateProcess = (id: string) => {
     setActionType("terminate")
     setTargetId(id)
     setIsConfirmDialogOpen(true)
+  }
+
+  const handleGetAppUsage = async (systemId: string) => {
+    setAppUsageLoading(true)
+    setAppUsageError(null)
+    setProcesses([])
+    setSnapshotTime(null)
+
+    try {
+      const result = await requestAppUsage(systemId)
+      setProcesses(result.entries || [])
+      setSnapshotTime(result.snapshot?.captured_at || null)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to fetch app usage"
+      setAppUsageError(message)
+    } finally {
+      setAppUsageLoading(false)
+    }
   }
 
   const executeAction = () => {
     setIsConfirmDialogOpen(false)
     setIsActionInProgress(true)
     setActionProgress(0)
+
+    const systemId = typeof targetId === "string" ? targetId : null
+
+    if (actionType === "shutdown" && systemId) {
+      createCommand(systemId, "SHUTDOWN").catch(() => {})
+    } else if (actionType === "restart" && systemId) {
+      createCommand(systemId, "RESTART").catch(() => {})
+    }
 
     // Simulate progress
     const interval = setInterval(() => {
@@ -134,11 +172,6 @@ export function AdminControlPanel() {
       clearInterval(interval)
       setIsActionInProgress(false)
       setActionProgress(100)
-
-      // Show success message or update state
-      alert(
-        `${actionType === "shutdown" ? "Shutdown" : actionType === "restart" ? "Restart" : "Termination"} completed successfully`,
-      )
     }, 3000)
   }
 
@@ -313,13 +346,52 @@ export function AdminControlPanel() {
           <CollapsibleContent>
             <Card>
               <CardHeader>
-                <CardTitle>Process Management</CardTitle>
-                <CardDescription>Monitor and control processes running on {selectedSystem}</CardDescription>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div>
+                    <CardTitle>Process Management</CardTitle>
+                    <CardDescription>
+                      Monitor and control processes running on {selectedSystem}
+                      {snapshotTime && (
+                        <span className="ml-2 text-xs opacity-70">
+                          (snapshot: {new Date(snapshotTime).toLocaleString()})
+                        </span>
+                      )}
+                    </CardDescription>
+                  </div>
+                  <Button
+                    onClick={() => handleGetAppUsage(selectedSystem)}
+                    disabled={appUsageLoading}
+                    size="sm"
+                  >
+                    {appUsageLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Fetching…
+                      </>
+                    ) : (
+                      <>
+                        <Activity className="h-4 w-4 mr-2" />
+                        Get App Usage
+                      </>
+                    )}
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
+                {appUsageError && (
+                  <div className="mb-4 rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                    {appUsageError}
+                  </div>
+                )}
+
                 <div className="flex items-center space-x-2 mb-4">
                   <Search className="h-4 w-4 text-muted-foreground" />
-                  <Input placeholder="Search processes..." className="max-w-sm" />
+                  <Input
+                    placeholder="Search processes..."
+                    className="max-w-sm"
+                    value={processSearch}
+                    onChange={(e) => setProcessSearch(e.target.value)}
+                  />
                 </div>
 
                 <div className="rounded-md border overflow-hidden">
@@ -328,55 +400,72 @@ export function AdminControlPanel() {
                       <TableHeader>
                         <TableRow>
                           <TableHead>Process Name</TableHead>
+                          <TableHead>PID</TableHead>
                           <TableHead>CPU Usage</TableHead>
                           <TableHead className="hidden md:table-cell">Memory (MB)</TableHead>
                           <TableHead className="hidden md:table-cell">User</TableHead>
-                          <TableHead>Status</TableHead>
                           <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {processes.map((process) => (
-                          <TableRow key={process.id}>
-                            <TableCell className="font-medium">{process.name}</TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <Progress
-                                  value={process.cpu}
-                                  className="h-2 w-16"
-                                  indicatorClassName={
-                                    process.cpu > 20
-                                      ? "bg-red-500"
-                                      : process.cpu > 10
-                                        ? "bg-orange-500"
-                                        : "bg-green-500"
-                                  }
-                                />
-                                <span className="text-xs">{process.cpu}%</span>
+                        {appUsageLoading && (
+                          <TableRow>
+                            <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                              <div className="flex items-center justify-center gap-2">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Waiting for agent to respond…
                               </div>
                             </TableCell>
-                            <TableCell className="hidden md:table-cell">{process.memory} MB</TableCell>
-                            <TableCell className="hidden md:table-cell">{process.user}</TableCell>
-                            <TableCell>
-                              <Badge
-                                variant={process.status === "suspicious" ? "destructive" : "outline"}
-                                className={
-                                  process.status === "suspicious"
-                                    ? ""
-                                    : "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800"
-                                }
-                              >
-                                {process.status}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Button variant="outline" size="sm" onClick={() => handleTerminateProcess(process.id)}>
-                                <Trash2 className="h-4 w-4 mr-1" />
-                                Terminate
-                              </Button>
+                          </TableRow>
+                        )}
+                        {!appUsageLoading && filteredProcesses.length === 0 && (
+                          <TableRow>
+                            <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                              {processes.length === 0
+                                ? 'Click "Get App Usage" to fetch running processes'
+                                : "No processes match your search"}
                             </TableCell>
                           </TableRow>
-                        ))}
+                        )}
+                        {!appUsageLoading &&
+                          filteredProcesses.map((process) => (
+                            <TableRow key={process.id}>
+                              <TableCell className="font-medium">{process.name}</TableCell>
+                              <TableCell className="text-xs text-muted-foreground">{process.pid}</TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <Progress
+                                    value={Math.min(process.cpu, 100)}
+                                    className="h-2 w-16"
+                                    indicatorClassName={
+                                      process.cpu > 20
+                                        ? "bg-red-500"
+                                        : process.cpu > 10
+                                          ? "bg-orange-500"
+                                          : "bg-green-500"
+                                    }
+                                  />
+                                  <span className="text-xs">{process.cpu}%</span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="hidden md:table-cell">
+                                {process.memory_mb.toFixed(1)} MB
+                              </TableCell>
+                              <TableCell className="hidden md:table-cell">
+                                {process.username || "—"}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleTerminateProcess(process.id)}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-1" />
+                                  Terminate
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
                       </TableBody>
                     </Table>
                   </ScrollArea>
@@ -394,7 +483,7 @@ export function AdminControlPanel() {
             <DialogDescription>
               {actionType === "shutdown" && `Are you sure you want to shut down ${targetId}?`}
               {actionType === "restart" && `Are you sure you want to restart ${targetId}?`}
-              {actionType === "terminate" && `Are you sure you want to terminate process ID ${targetId}?`}
+              {actionType === "terminate" && `Are you sure you want to terminate this process?`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

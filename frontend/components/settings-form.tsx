@@ -31,7 +31,7 @@ export function SettingsForm() {
 
   return (
     <Tabs defaultValue="notifications" className="w-full">
-      <TabsList className="grid w-full max-w-md grid-cols-3">
+      <TabsList className="grid w-full grid-cols-3">
         <TabsTrigger value="notifications">Notifications</TabsTrigger>
         <TabsTrigger value="appearance">Appearance</TabsTrigger>
         <TabsTrigger value="advanced">Advanced</TabsTrigger>

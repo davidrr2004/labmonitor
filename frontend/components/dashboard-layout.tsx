@@ -45,7 +45,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen bg-background">
+      <div className="flex min-h-screen w-full bg-background">
         <Sidebar>
           <SidebarHeader className="relative flex h-[120px] items-start justify-between border-b px-6 pt-6">
             <div className="relative z-10 flex items-center gap-3">
@@ -124,15 +124,15 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
             </div>
           </SidebarFooter>
         </Sidebar>
-        <div className="flex flex-1 flex-col">
+        <div className="flex flex-1 flex-col min-w-0">
           <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6">
             <SidebarTrigger />
             <div className="ml-auto flex items-center gap-2">
               <ModeToggle className="md:hidden" />
             </div>
           </header>
-          <main className="flex-1 overflow-auto">
-            <div className="w-full py-6 px-4 md:px-6 lg:px-8">{children}</div>
+          <main className="flex-1 overflow-auto w-full">
+            <div className="w-full max-w-full py-6 px-4 md:px-6 lg:px-8">{children}</div>
           </main>
         </div>
       </div>
