@@ -47,7 +47,9 @@ const processes = [
 ]
 
 function formatTimeAgo(timestamp: string): string {
-  const diff = Date.now() - new Date(timestamp).getTime()
+  const date = new Date(timestamp)
+  if (date.getFullYear() <= 1) return "Never"
+  const diff = Date.now() - date.getTime()
   const minutes = Math.floor(diff / 60000)
   if (minutes < 1) return "just now"
   if (minutes < 60) return `${minutes} minute${minutes > 1 ? "s" : ""} ago`

@@ -17,7 +17,9 @@ import {
 } from "@/lib/api"
 
 function formatTimeAgo(timestamp: string): string {
-  const diff = Date.now() - new Date(timestamp).getTime()
+  const date = new Date(timestamp)
+  if (date.getFullYear() <= 1) return "Never"
+  const diff = Date.now() - date.getTime()
   const minutes = Math.floor(diff / 60000)
   if (minutes < 1) return "just now"
   if (minutes < 60) return `${minutes} minute${minutes > 1 ? "s" : ""} ago`
@@ -75,7 +77,7 @@ export default function DashboardPage() {
           }
           const b = buckets.get(hour)!
           b.cpu.push(log.cpu)
-          b.network.push((log.network_in + log.network_out) / 2)
+          b.network.push(Math.min(((log.network_in + log.network_out) / 12500) * 100, 100))
           b.memory.push(log.memory)
         }
         const avg = (arr: number[]) =>
@@ -120,7 +122,8 @@ export default function DashboardPage() {
 
   const totalSystems = summary?.total_systems ?? 0
   const avgCPU = summary?.averages?.cpu ?? 0
-  const avgNetwork = summary?.averages?.network ?? 0
+  const avgNetworkRaw = summary?.averages?.network ?? 0
+  const avgNetwork = Math.min(Math.round((avgNetworkRaw / 12500) * 100), 100)
   const avgMemory = summary?.averages?.memory ?? 0
 
   return (
